@@ -1,0 +1,607 @@
+---
+title: "Two-part model: producer market share"
+author: "Milan Chauhan"
+date: "2025-02-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#Risk Management Education and Livestock Risk Protection Utilization
+#Codes from final submission to the Journal of Agricultural and Applied Economics (JAAE)
+
+```
+
+
+```{r}
+
+#Packages 
+library(tidyverse)
+library(readxl)
+library(dplyr)
+library(fixest)
+library(modelsummary)
+library(ggplot2)
+
+
+```
+
+```{r}
+
+#setting working directory
+setwd("C:/Users/mchauhan2/OneDrive - University of Nebraska-Lincoln/Lubben-Chauhan/LRP utilization/JAAE analysis/final model producer market share")
+getwd()
+
+```
+
+
+```{R}
+#master counties
+usa <- state.name %>% 
+  toupper()
+
+length(usa)
+
+```
+
+
+
+
+```{R}
+years <- 2003: 2023
+
+```
+
+```{r}
+#LRP education workshop by state
+
+education1 <- expand.grid(year = years, state = usa) %>% 
+  mutate(state = as.character(state))
+
+education2 <- read_excel("education.xlsx", sheet = 1)
+
+education3 <- education1 %>% 
+  left_join(education2, by = c("year", "state")) %>% 
+  mutate(workshop = ifelse(is.na(workshop), 0, workshop),
+                           projects = ifelse(is.na(projects), 0, projects))%>% 
+  mutate(
+    dollar.on.workshop = ifelse(workshop == 0 & is.na(dollar.on.workshop), 0, dollar.on.workshop),
+    dollar.per.workshop = ifelse(workshop == 0 & is.na(dollar.per.workshop), 0, dollar.per.workshop)
+  ) %>% 
+  group_by(state) %>% 
+  mutate(cumedu = cumsum(workshop)) %>% 
+  ungroup() %>% 
+  group_by(year, state) %>% 
+  mutate(yn.education = ifelse(workshop > 0, 1, 0)) %>% 
+   mutate(workshop = ifelse(is.na(workshop),0, workshop)) %>% 
+  ungroup()
+
+
+```
+
+
+
+```{r}
+#Summary of business (SOB) by state 
+
+sob1 <- read_excel("sobstate.xlsx", sheet = 2) %>% 
+  mutate(year = as.numeric(year))
+
+
+
+
+sob2 <- expand.grid(year = years, state = usa) %>%
+  mutate(state = as.character(state)) %>%
+  left_join(sob1, by = c("year", "state")) %>% 
+  mutate(cost.per.head = tot.premium / insured.head)
+
+
+
+
+```
+
+
+```{r}
+#feeder cattle
+
+feed <- read_excel("eliotfeeder.xlsx", sheet =1)
+
+
+#herd size
+
+
+herd.size <- read_excel("herdsize.xlsx") %>% 
+  mutate(herd.size = ceiling(herd.size))
+
+#sob 
+
+
+sob3 <- sob2 %>% 
+  left_join(feed, by = c("year", "state")) %>% 
+  mutate(liability.by.feedercattle = liability/feeder) %>% 
+  mutate(insuredhead.by.feedercattle = insured.head/feeder) %>% 
+  mutate(insuredhead.by.feedercattle = ifelse(policy.earningprem == 0, 0, insuredhead.by.feedercattle)) %>% 
+    mutate(liability.by.feedercattle = ifelse(policy.earningprem == 0, 0, liability.by.feedercattle)) %>% 
+  left_join(herd.size, by = c("year", "state")) %>% 
+  mutate(market.share.producer = policy.earningprem/operation) %>% 
+    mutate(insuredhead.by.feedercattle = ifelse(policy.earningprem == 0, 0, insuredhead.by.feedercattle))
+
+  
+
+#CME feeder cattle index
+
+index <- read_excel("volatilityfeeder.xlsx", sheet = 1) %>% 
+  distinct(year, .keep_all = TRUE) %>% 
+  rename(cattle.index = avg.index,
+         SD = std.index)
+
+# Create a data frame with years from 2003 to 2023
+base <- data.frame(year = 2003:2023) %>%
+  mutate(
+    base.subsidy = case_when(
+      year >= 2003 & year <= 2019 ~ 13,
+      year == 2020 ~ 20,
+      year > 2020 ~ 35
+    )
+  )
+
+#LRP availability 
+
+avail <- read_excel("lrp_availability.xlsx") %>% 
+  mutate(state =toupper(state)) %>% 
+  arrange(state)
+
+
+#with education
+
+sob.price.edu <- education3 %>% 
+  left_join(sob3, by = c("year", "state")) %>% 
+  left_join(index, by = "year") %>% 
+  left_join(avail, by = c("year", "state")) %>% 
+  left_join(base, by = "year")
+
+```
+
+
+
+
+```{R}
+library(dplyr)
+library(tidyverse)
+
+original <- sob.price.edu %>% 
+  mutate(across(-c(year, state, policy.sold, base.subsidy, projects, workshop, dollar.on.workshop, dollar.per.workshop, cumedu, cattle.index, SD, price, herd.size, operation, eligibility), 
+                  ~ ifelse(policy.earningprem == 0, 0, .))) %>% 
+  dplyr::select(year, state, policy.sold, policy.earningprem, market.share.producer, insuredhead.by.feedercattle, cost.per.head, liability.by.feedercattle, cattle.index, SD, projects, workshop, dollar.on.workshop, dollar.per.workshop, cumedu, base.subsidy, herd.size, eligibility) 
+
+
+
+eligible.dataset <- original %>% 
+  dplyr::select(
+    year, state, policy.sold, policy.earningprem, market.share.producer, 
+    insuredhead.by.feedercattle, cost.per.head, liability.by.feedercattle, 
+    cattle.index, SD, projects, workshop, dollar.on.workshop, dollar.per.workshop,
+    cumedu, base.subsidy, herd.size, eligibility
+  ) %>% 
+  filter(eligibility == 1) %>%   # scaling issues
+  mutate(
+    workshop = workshop * 10,
+    projects = projects*10,
+    herd.size = herd.size,
+    sq.herd.size = herd.size^2,
+    
+    # Replace NA in policy.earningprem with 0
+    policy.earningprem = ifelse(is.na(policy.earningprem), 0, policy.earningprem),
+    
+    # Set corresponding values to 0 when policy.earningprem == 0
+    policy.sold = ifelse(policy.earningprem == 0, 0, policy.sold),
+    market.share.producer = ifelse(policy.earningprem == 0, 0, market.share.producer),
+    insuredhead.by.feedercattle = ifelse(policy.earningprem == 0, 0, insuredhead.by.feedercattle),
+    liability.by.feedercattle = ifelse(policy.earningprem == 0, 0, liability.by.feedercattle),
+    cost.per.head = ifelse(policy.earningprem == 0, 0, cost.per.head))
+
+
+
+#adding trend
+
+#time trend
+
+eligible.dataset$trend <- eligible.dataset$year - 2003 + 1
+
+
+```
+
+
+```{r}
+#adding state trend with state entered year = 1
+
+library(dplyr)
+
+eligible.dataset <- eligible.dataset %>%
+  arrange(state, year) %>%
+  group_by(state) %>%
+  mutate(trend_state = year - min(year) + 1) %>%
+  ungroup()
+
+```
+
+
+
+```{r}
+
+#summary stat
+
+summary <- eligible.dataset %>% 
+  summary()
+print(summary)
+
+```
+
+
+
+
+```{R}
+#packages 
+
+library(dplyr)
+library(margins)
+library(MASS)
+library(pscl)
+library(sandwich)
+
+
+#dataset preparation 
+
+
+#pilot state 
+
+pilot <- c("COLORADO", "IOWA", "KANSAS", "NEBRASKA", "NEVADA", 
+           "OKLAHOMA", "SOUTH DAKOTA", "TEXAS", "UTAH", "WYOMING")
+
+data.pilot <- eligible.dataset %>% 
+  filter(state %in% pilot)
+
+
+
+#non-pilot state 
+
+nonpilot <- c("COLORADO", "IOWA", "KANSAS", "NEBRASKA", "NEVADA", 
+           "OKLAHOMA", "SOUTH DAKOTA", "TEXAS", "UTAH", "WYOMING")
+
+data.nonpilot <- eligible.dataset %>% 
+  filter(!state %in% pilot)
+
+
+
+#pre 2020
+
+pre2020.pool <- eligible.dataset %>% 
+  dplyr::filter(year<2020) 
+  
+
+
+
+pre2020.nonpilot <- pre2020.pool %>% 
+  filter(!state %in% pilot)
+
+
+pre2020.pilot <- pre2020.pool %>% 
+  filter(state%in%pilot)
+
+
+#year 2020
+
+
+pool.2020 <- eligible.dataset %>% 
+  dplyr::filter(year==2020)
+
+
+nonpilot.2020 <- pool.2020 %>% 
+  filter(!state %in% pilot)
+
+
+pilot.2020 <- pool.2020 %>% 
+  filter(state %in% pilot)
+
+
+
+
+
+#post 2019
+
+post2019.pool <- eligible.dataset %>% 
+  filter(year>2019) 
+
+
+post2019.nonpilot <- post2019.pool %>% 
+  filter(!state%in%pilot)
+
+post2019.pilot <- post2019.pool %>% 
+  filter(state%in%pilot)
+
+
+```
+
+
+
+
+
+```{R}
+#distribution by pilot and non-pilot states 
+
+eligible.dataset <- eligible.dataset %>%
+  mutate(state.type = ifelse(
+    state %in% c("COLORADO", "IOWA", "KANSAS", "NEBRASKA", "NEVADA", 
+                 "OKLAHOMA", "SOUTH DAKOTA", "TEXAS", "UTAH", "WYOMING"),
+    "Pilot states",
+    "Non-pilot states"
+  ))
+
+#density plot 
+
+ggplot(eligible.dataset, aes(x = market.share.producer, fill = state.type, color = state.type)) +
+  geom_density(alpha = 0.3, size = 1) +
+  labs(
+    x = "LRP producer market share",
+    y = "Density",
+    fill = NULL,
+    color = NULL
+  ) +
+  theme_minimal(base_size = 14) +       
+  scale_fill_manual(values = c("Pilot states" = "#92C5DE", 
+                               "Non-pilot states" = "#F4A582")) +
+  scale_color_manual(values = c("Pilot states" = "#2166AC", 
+                                "Non-pilot states" = "#B2182B"))
+
+```
+
+
+
+
+
+```{R}
+#extensive margin 
+#pooled sample: producer market share
+#2003-2023
+
+library(dplyr)
+library(lmtest)
+
+
+
+data.extensive.pool.producer <- eligible.dataset %>%
+  mutate(market.share.producer = ifelse(market.share.producer > 0, 1, 0)) %>% 
+  mutate(lag.lrp = lag(market.share.producer, 1))
+
+
+logit.pool.producer <- glm(market.share.producer ~ cattle.index + SD + base.subsidy*workshop +
+                   herd.size + sq.herd.size + trend,
+                   data = data.extensive.pool.producer, family = binomial(link = "logit"))
+
+summary(logit.pool.producer)
+
+# clustered standard errors by 'state'
+cluster_se <- vcovCL(logit.pool.producer, cluster = ~state)
+
+# Clustered coefficient test
+coeftest(logit.pool.producer, vcov. = cluster_se)
+
+
+
+#marginal effect 
+
+library(margins)
+
+margins(logit.pool.producer)
+
+#log likelihood (llk)
+
+logLik(logit.pool.producer)
+
+
+```
+
+
+
+
+
+```{r}
+#extensive margin: non-pilot states 
+#producer market share
+#2003-2023
+
+
+library(dplyr)
+
+
+data.extensive.nonpilot.producer <- data.nonpilot %>%
+  mutate(market.share.producer = ifelse(market.share.producer > 0, 1, 0)) %>% 
+  mutate(lag.lrp = lag(market.share.producer, 1))
+
+
+
+logit.nonpilot.producer <- glm(market.share.producer ~ cattle.index + SD + workshop* base.subsidy +
+                   herd.size + sq.herd.size + trend, 
+                   data = data.extensive.nonpilot.producer, family = binomial(link = "logit"))
+
+summary(logit.nonpilot.producer)
+
+# clustered standard errors by 'state'
+cluster_se <- vcovCL(logit.nonpilot.producer, cluster = ~state)
+
+# Clustered coefficient test
+coeftest(logit.nonpilot.producer, vcov. = cluster_se)
+
+
+#marginal effect 
+
+margins(logit.nonpilot.producer)
+
+
+#llk
+
+logLik(logit.nonpilot.producer)
+
+```
+
+
+
+
+```{R}
+#extensive margin: pilot states 
+#producer market share
+#2003-2023
+
+
+
+library(dplyr)
+
+
+data.extensive.pilot.producer <- data.pilot %>%
+  mutate(market.share.producer = ifelse(market.share.producer > 0, 1, 0)) %>% 
+      mutate(lag.lrp = lag(market.share.producer, 1))
+
+logit.pilot.producer <- glm(
+  market.share.producer ~ cattle.index + SD + 
+                   herd.size+ sq.herd.size + trend* workshop,
+  data = data.extensive.pilot.producer,
+  family = binomial(link = "logit")
+)
+
+summary(logit.pilot.producer)
+
+
+# clustered standard errors by 'state'
+cluster_se <- vcovCL(logit.pilot.producer, cluster = ~state)
+
+# Clustered coefficient test
+coeftest(logit.pilot.producer, vcov. = cluster_se)
+
+
+#marginal effects 
+
+margins(logit.pilot.producer)
+
+#llk
+
+logLik(logit.pilot.producer)
+
+
+```
+
+
+
+
+
+```{R}
+#intensive margin
+#producer market share
+#pooled sample
+#2003-2023
+
+
+library(lmtest)
+
+data.intensive.pool.producer <- eligible.dataset %>%
+filter(market.share.producer>0)
+
+#fractional producer
+fractional.pool.producer <-glm(market.share.producer ~ cattle.index + SD + workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = data.intensive.pool.producer,
+  family = quasibinomial (link = "logit")
+)
+
+summary(fractional.pool.producer)
+
+#clustered standard errors by 'state'
+cluster_se <- vcovCL(fractional.pool.producer, cluster = ~state)
+
+# Clustered coefficient test
+coeftest(fractional.pool.producer, vcov. = cluster_se)
+
+
+#marginal effect at mean AME
+
+margins(fractional.pool.producer)
+
+
+```
+
+
+
+
+```{R}
+#intensive margin
+#producer market share
+#non-pilot sample
+#2003-2023
+
+
+library(lmtest)
+
+data.intensive.nonpilot.producer <- data.nonpilot %>%
+filter(market.share.producer>0)
+
+#fractional producer
+fractional.nonpilot.producer <-glm(market.share.producer ~ cattle.index + SD + workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = data.intensive.nonpilot.producer,
+  family = quasibinomial (link = "logit")
+)
+
+summary(fractional.nonpilot.producer)
+
+# clustered standard errors by 'state'
+cluster_se <- vcovCL(fractional.nonpilot.producer, cluster = ~state)
+
+# Clustered coefficient test
+coeftest(fractional.nonpilot.producer, vcov. = cluster_se)
+
+
+#marginal effect 
+
+margins(fractional.nonpilot.producer)
+
+```
+
+
+
+
+
+
+
+```{R}
+#intensive margin
+#producer market share
+#pilot sample
+#2003-2023
+
+
+
+data.intensive.pilot.producer <- data.pilot %>%
+filter(market.share.producer>0)
+
+#fractional producer
+fractional.pilot.producer <-glm(market.share.producer ~ cattle.index + SD + workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = data.intensive.pilot.producer,
+  family = quasibinomial (link = "logit")
+)
+
+summary(fractional.pilot.producer)
+
+# Compute clustered standard errors by 'state'
+cluster_se <- vcovCL(fractional.pilot.producer, cluster = ~state)
+
+# Clustered coefficient test
+coeftest(fractional.pilot.producer, vcov. = cluster_se)
+
+#marginal effect 
+
+margins(fractional.pilot.producer)
+
+
+```
+
