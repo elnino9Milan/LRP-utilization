@@ -1,0 +1,1933 @@
+---
+title: "Two-part model: producer market share"
+author: "Milan Chauhan"
+date: "2025-02-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+
+#Packages 
+library(tidyverse)
+library(readxl)
+library(dplyr)
+library(fixest)
+library(modelsummary)
+library(ggplot2)
+
+
+```
+
+```{r}
+
+#setting working directory
+setwd("C:/Users/mchauhan2/OneDrive - University of Nebraska-Lincoln/Lubben-Chauhan/LRP utilization/JAAE analysis/final model producer market share")
+getwd()
+
+```
+
+
+```{R}
+#master counties
+usa <- state.name %>% 
+  toupper()
+
+length(usa)
+
+```
+```{R}
+years <- 2003: 2023
+
+```
+
+```{r}
+#LRP education workshop by state
+
+education1 <- expand.grid(year = years, state = usa) %>% 
+  mutate(state = as.character(state))
+
+education2 <- read_excel("education.xlsx", sheet = 1)
+
+education3 <- education1 %>% 
+  left_join(education2, by = c("year", "state")) %>% 
+  mutate(workshop = ifelse(is.na(workshop), 0, workshop),
+                           projects = ifelse(is.na(projects), 0, projects))%>% 
+  mutate(
+    dollar.on.workshop = ifelse(workshop == 0 & is.na(dollar.on.workshop), 0, dollar.on.workshop),
+    dollar.per.workshop = ifelse(workshop == 0 & is.na(dollar.per.workshop), 0, dollar.per.workshop)
+  ) %>% 
+  group_by(state) %>% 
+  mutate(cumedu = cumsum(workshop)) %>% 
+  ungroup() %>% 
+  group_by(year, state) %>% 
+  mutate(yn.education = ifelse(workshop > 0, 1, 0)) %>% 
+   mutate(workshop = ifelse(is.na(workshop),0, workshop)) %>% 
+  ungroup()
+
+
+```
+
+
+
+```{r}
+#SOB by state 
+
+sob1 <- read_excel("sobstate.xlsx", sheet = 2) %>% 
+  mutate(year = as.numeric(year))
+
+
+
+
+# 
+sob2 <- expand.grid(year = years, state = usa) %>%
+  mutate(state = as.character(state)) %>%
+  left_join(sob1, by = c("year", "state")) %>% 
+  mutate(cost.per.head = tot.premium / insured.head)
+
+
+
+
+```
+
+
+```{r}
+#feeder cattle
+
+feed <- read_excel("eliotfeeder.xlsx", sheet =1)
+
+
+#herd size
+
+
+herd.size <- read_excel("herdsize.xlsx") %>% 
+  mutate(herd.size = ceiling(herd.size))
+
+#sob 
+
+
+sob3 <- sob2 %>% 
+  left_join(feed, by = c("year", "state")) %>% 
+  mutate(liability.by.feedercattle = liability/feeder) %>% 
+  mutate(insuredhead.by.feedercattle = insured.head/feeder) %>% 
+  mutate(insuredhead.by.feedercattle = ifelse(policy.earningprem == 0, 0, insuredhead.by.feedercattle)) %>% 
+    mutate(liability.by.feedercattle = ifelse(policy.earningprem == 0, 0, liability.by.feedercattle)) %>% 
+  left_join(herd.size, by = c("year", "state")) %>% 
+  mutate(market.share.producer = policy.earningprem/operation) %>% 
+    mutate(insuredhead.by.feedercattle = ifelse(policy.earningprem == 0, 0, insuredhead.by.feedercattle))
+
+  
+
+#CME feeder cattle index
+
+index <- read_excel("volatilityfeeder.xlsx", sheet = 1) %>% 
+  distinct(year, .keep_all = TRUE) %>% 
+  rename(cattle.index = avg.index,
+         SD = std.index)
+
+# Create a data frame with years from 2003 to 2023
+base <- data.frame(year = 2003:2023) %>%
+  mutate(
+    base.subsidy = case_when(
+      year >= 2003 & year <= 2019 ~ 13,
+      year == 2020 ~ 20,
+      year > 2020 ~ 35
+    )
+  )
+
+#LRP availability 
+
+avail <- read_excel("lrp_availability.xlsx") %>% 
+  mutate(state =toupper(state)) %>% 
+  arrange(state)
+
+
+#with education
+
+sob.price.edu <- education3 %>% 
+  left_join(sob3, by = c("year", "state")) %>% 
+  left_join(index, by = "year") %>% 
+  left_join(avail, by = c("year", "state")) %>% 
+  left_join(base, by = "year")
+
+```
+
+
+
+
+```{R}
+library(dplyr)
+library(tidyverse)
+
+original <- sob.price.edu %>% 
+  mutate(across(-c(year, state, policy.sold, base.subsidy, projects, workshop, dollar.on.workshop, dollar.per.workshop, cumedu, cattle.index, SD, price, herd.size, operation, eligibility), 
+                  ~ ifelse(policy.earningprem == 0, 0, .))) %>% 
+  dplyr::select(year, state, policy.sold, policy.earningprem, market.share.producer, insuredhead.by.feedercattle, cost.per.head, liability.by.feedercattle, cattle.index, SD, projects, workshop, dollar.on.workshop, dollar.per.workshop, cumedu, base.subsidy, herd.size, eligibility) 
+
+
+
+eligible.dataset <- original %>% 
+  dplyr::select(
+    year, state, policy.sold, policy.earningprem, market.share.producer, 
+    insuredhead.by.feedercattle, cost.per.head, liability.by.feedercattle, 
+    cattle.index, SD, projects, workshop, dollar.on.workshop, dollar.per.workshop,
+    cumedu, base.subsidy, herd.size, eligibility
+  ) %>% 
+  filter(eligibility == 1) %>%   # scaling issues
+  mutate(
+    workshop = workshop * 10,
+    projects = projects*10,
+    herd.size = herd.size,
+    sq.herd.size = herd.size^2,
+    
+    # Replace NA in policy.earningprem with 0
+    policy.earningprem = ifelse(is.na(policy.earningprem), 0, policy.earningprem),
+    
+    # Set corresponding values to 0 when policy.earningprem == 0
+    policy.sold = ifelse(policy.earningprem == 0, 0, policy.sold),
+    market.share.producer = ifelse(policy.earningprem == 0, 0, market.share.producer),
+    insuredhead.by.feedercattle = ifelse(policy.earningprem == 0, 0, insuredhead.by.feedercattle),
+    liability.by.feedercattle = ifelse(policy.earningprem == 0, 0, liability.by.feedercattle),
+    cost.per.head = ifelse(policy.earningprem == 0, 0, cost.per.head))
+
+
+
+#adding trend
+
+#time trend
+
+eligible.dataset$trend <- eligible.dataset$year - 2003 + 1
+
+
+```
+
+
+```{r}
+#adding state trend
+
+library(dplyr)
+
+eligible.dataset <- eligible.dataset %>%
+  arrange(state, year) %>%
+  group_by(state) %>%
+  mutate(trend_state = year - min(year) + 1) %>%
+  ungroup()
+
+```
+
+
+
+```{r}
+#summary DVs
+
+dv.summary <- eligible.dataset %>% 
+  dplyr::select(market.share.producer, insuredhead.by.feedercattle, cost.per.head, liability.by.feedercattle) %>% 
+  summary()
+
+print(dv.summary)
+
+```
+
+
+```{R}
+#saving final file for analysis
+
+library(writexl)
+library(openxlsx)
+write.xlsx(eligible.dataset, file = "eligible.xlsx", rowNames = FALSE)
+
+```
+
+
+```{r}
+
+#summary stat
+
+summary <- eligible.dataset %>% 
+  summary()
+print(summary)
+
+```
+
+
+
+
+```{R}
+#packages 
+
+library(dplyr)
+library(margins)
+library(MASS)
+library(pscl)
+library(sandwich)
+
+
+#dataset preparation 
+
+
+#pilot state 
+
+pilot <- c("COLORADO", "IOWA", "KANSAS", "NEBRASKA", "NEVADA", 
+           "OKLAHOMA", "SOUTH DAKOTA", "TEXAS", "UTAH", "WYOMING")
+
+data.pilot <- eligible.dataset %>% 
+  filter(state %in% pilot)
+
+
+
+#non-pilot state 
+
+nonpilot <- c("COLORADO", "IOWA", "KANSAS", "NEBRASKA", "NEVADA", 
+           "OKLAHOMA", "SOUTH DAKOTA", "TEXAS", "UTAH", "WYOMING")
+
+data.nonpilot <- eligible.dataset %>% 
+  filter(!state %in% pilot)
+
+
+
+#pre 2020
+
+pre2020.pool <- eligible.dataset %>% 
+  dplyr::filter(year<2020) 
+  
+
+
+
+pre2020.nonpilot <- pre2020.pool %>% 
+  filter(!state %in% pilot)
+
+
+pre2020.pilot <- pre2020.pool %>% 
+  filter(state%in%pilot)
+
+
+#year 2020
+
+
+pool.2020 <- eligible.dataset %>% 
+  dplyr::filter(year==2020)
+
+
+nonpilot.2020 <- pool.2020 %>% 
+  filter(!state %in% pilot)
+
+
+pilot.2020 <- pool.2020 %>% 
+  filter(state %in% pilot)
+
+
+
+
+
+#post 2020
+
+post2020.pool <- eligible.dataset %>% 
+  filter(year>2020) 
+
+
+post2020.nonpilot <- post2020.pool %>% 
+  filter(!state%in%pilot)
+
+post2020.pilot <- post2020.pool %>% 
+  filter(state%in%pilot)
+
+
+```
+
+
+```{R}
+#count of purchase rate 
+
+library(dplyr)
+
+purchase_stats <- function(df) {
+  df %>%
+    summarise(
+      observations = n(),
+      positive_count = sum(policy.earningprem > 0, na.rm = TRUE),
+      purchase_rate = positive_count / observations
+    )
+}
+
+# pre 2020
+purchase_stats(pre2020.pool)
+purchase_stats(pre2020.pilot)
+purchase_stats(pre2020.nonpilot)
+
+# year 2020
+purchase_stats(pool.2020)
+purchase_stats(pilot.2020)
+purchase_stats(nonpilot.2020)
+
+# post 2020
+purchase_stats(post2020.pool)
+purchase_stats(post2020.pilot)
+purchase_stats(post2020.nonpilot)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+```{R}
+#distribution by pilot and non-pilot states 
+
+eligible.dataset <- eligible.dataset %>%
+  mutate(state.type = ifelse(
+    state %in% c("COLORADO", "IOWA", "KANSAS", "NEBRASKA", "NEVADA", 
+                 "OKLAHOMA", "SOUTH DAKOTA", "TEXAS", "UTAH", "WYOMING"),
+    "Pilot states",
+    "Non-pilot states"
+  ))
+
+#density plot 
+
+ggplot(eligible.dataset, aes(x = market.share.producer, fill = state.type, color = state.type)) +
+  geom_density(alpha = 0.3, size = 1) +
+  labs(
+    x = "LRP producer market share",
+    y = "Density",
+    fill = NULL,
+    color = NULL
+  ) +
+  theme_minimal(base_size = 14) +       
+  scale_fill_manual(values = c("Pilot states" = "#92C5DE", 
+                               "Non-pilot states" = "#F4A582")) +
+  scale_color_manual(values = c("Pilot states" = "#2166AC", 
+                                "Non-pilot states" = "#B2182B"))
+
+```
+
+
+
+
+
+```{R}
+#extensive margin 
+#pooled sample: producer market share
+
+library(dplyr)
+library(lmtest)
+
+
+
+data.extensive.pool.producer <- eligible.dataset %>%
+  mutate(market.share.producer = ifelse(market.share.producer > 0, 1, 0)) %>% 
+  mutate(lag.lrp = lag(market.share.producer, 1))
+
+
+logit.pool.producer <- glm(market.share.producer ~ cattle.index + SD + base.subsidy +
+                   herd.size + sq.herd.size + trend* workshop,
+                   data = data.extensive.pool.producer, family = binomial(link = "logit"))
+
+summary(logit.pool.producer)
+
+# Compute clustered standard errors by 'state'
+cluster_se <- vcovCL(logit.pool.producer, cluster = ~state)
+
+# Clustered coefficient test
+coeftest(logit.pool.producer, vcov. = cluster_se)
+
+
+
+#marginal effect 
+
+library(margins)
+
+margins(logit.pool.producer)
+
+#llk
+
+logLik(logit.pool.producer)
+
+
+```
+
+
+
+
+
+
+
+```{R}
+#addressing JAAE coment
+
+
+library(dplyr)
+
+data.extensive.pool.producer %>%
+  group_by(base.subsidy, year) %>%
+  summarize(mean_subsidy = mean(base.subsidy, na.rm = TRUE),
+            sd_subsidy = sd(base.subsidy, na.rm = TRUE),
+            .groups = "drop")
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+```{R}
+#libraries for logit and tidy 
+
+library(dplyr)
+library(broom)
+library(sandwich)
+library(lmtest)
+library(modelsummary)
+
+
+```
+
+
+
+
+```{R}
+
+#extensive margin (2003-2023)
+
+
+data.extensive.pool.producer <- eligible.dataset %>%
+  mutate(market.share.producer = ifelse(market.share.producer > 0, 1, 0)) %>% 
+  mutate(lag.lrp = lag(market.share.producer, 1))
+
+
+
+
+
+
+#workshop
+
+model1 <- glm(market.share.producer ~ cattle.index + SD  +
+                herd.size + sq.herd.size + trend*workshop,
+              data = data.extensive.pool.producer,
+              family = binomial(link = "logit"))
+
+#clustering by state
+
+cluster_se <- vcovCL(model1, cluster = ~state)
+
+# Clustered coefficient test
+coeftest(model1, vcov. = cluster_se)
+
+
+#marginal effects 
+
+margins(model1)
+
+
+
+```
+
+
+
+```{r}
+#extensive margin: non-pilot states 
+#producer market share
+
+
+library(dplyr)
+
+
+data.extensive.nonpilot.producer <- data.nonpilot %>%
+  mutate(market.share.producer = ifelse(market.share.producer > 0, 1, 0)) %>% 
+  mutate(lag.lrp = lag(market.share.producer, 1))
+
+
+
+logit.nonpilot.producer <- glm(market.share.producer ~ cattle.index + SD + workshop* base.subsidy +
+                   herd.size + sq.herd.size + trend_state, 
+                   data = data.extensive.nonpilot.producer, family = binomial(link = "logit"))
+
+summary(logit.nonpilot.producer)
+
+# Compute clustered standard errors by 'state'
+cluster_se <- vcovCL(logit.nonpilot.producer, cluster = ~state)
+
+# Clustered coefficient test
+coeftest(logit.nonpilot.producer, vcov. = cluster_se)
+
+
+#marginal effect 
+
+margins(logit.nonpilot.producer)
+
+
+#llk
+
+logLik(logit.nonpilot.producer)
+
+```
+
+
+
+
+```{R}
+#extensive margin: pilot states 
+#producer market share
+
+
+library(dplyr)
+
+
+data.extensive.pilot.producer <- data.pilot %>%
+  mutate(market.share.producer = ifelse(market.share.producer > 0, 1, 0)) %>% 
+      mutate(lag.lrp = lag(market.share.producer, 1))
+
+logit.pilot.producer <- glm(
+  market.share.producer ~ cattle.index + SD + 
+                   herd.size+ sq.herd.size + trend_state* workshop,
+  data = data.extensive.pilot.producer,
+  family = binomial(link = "logit")
+)
+
+summary(logit.pilot.producer)
+
+
+# Compute clustered standard errors by 'state'
+cluster_se <- vcovCL(logit.pilot.producer, cluster = ~state)
+
+# Clustered coefficient test
+coeftest(logit.pilot.producer, vcov. = cluster_se)
+
+
+#marginal effects 
+
+margins(logit.pilot.producer)
+
+#llk
+
+logLik(logit.pilot.producer)
+
+
+```
+
+
+
+
+
+```{R}
+#intensive margin
+#producer market share
+#pooled sample
+
+library(lmtest)
+
+data.intensive.pool.producer <- eligible.dataset %>%
+filter(market.share.producer>0)
+
+#fractional producer
+fractional.pool.producer <-glm(market.share.producer ~ cattle.index + SD + workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = data.intensive.pool.producer,
+  family = quasibinomial (link = "logit")
+)
+
+summary(fractional.pool.producer)
+
+# Compute clustered standard errors by 'state'
+cluster_se <- vcovCL(fractional.pool.producer, cluster = ~state)
+
+# Clustered coefficient test
+coeftest(fractional.pool.producer, vcov. = cluster_se)
+
+
+#marginal effect at mean
+
+margins(fractional.pool.producer)
+
+
+```
+
+
+
+
+```{R}
+#intensive margin
+#producer market share
+#non-pilot sample
+library(lmtest)
+
+data.intensive.nonpilot.producer <- data.nonpilot %>%
+filter(market.share.producer>0)
+
+#fractional producer
+fractional.nonpilot.producer <-glm(market.share.producer ~ cattle.index + SD + workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = data.intensive.nonpilot.producer,
+  family = quasibinomial (link = "logit")
+)
+
+summary(fractional.nonpilot.producer)
+
+# Compute clustered standard errors by 'state'
+cluster_se <- vcovCL(fractional.nonpilot.producer, cluster = ~state)
+
+# Clustered coefficient test
+coeftest(fractional.nonpilot.producer, vcov. = cluster_se)
+
+
+#marginal effect 
+
+margins(fractional.nonpilot.producer)
+
+```
+
+
+
+
+
+
+
+```{R}
+#intensive margin
+#producer market share
+#pilot sample
+
+data.intensive.pilot.producer <- data.pilot %>%
+filter(market.share.producer>0)
+
+#fractional producer
+fractional.pilot.producer <-glm(market.share.producer ~ cattle.index + SD + workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = data.intensive.pilot.producer,
+  family = quasibinomial (link = "logit")
+)
+
+summary(fractional.pilot.producer)
+
+# Compute clustered standard errors by 'state'
+cluster_se <- vcovCL(fractional.pilot.producer, cluster = ~state)
+
+# Clustered coefficient test
+coeftest(fractional.pilot.producer, vcov. = cluster_se)
+
+#marginal effect 
+
+margins(fractional.pilot.producer)
+
+
+```
+
+
+
+
+
+
+
+
+
+
+```{R}
+#extensive margin 
+#producer market share : pre and post 2018
+#pooled
+library(dplyr)
+library(lmtest)
+
+
+#pre 2019
+
+data.extensive.pre.producer <- pre2019.pool %>%
+  mutate(market.share.producer = ifelse(market.share.producer > 0, 1, 0))
+
+
+logit.pre.producer <- glm(market.share.producer ~ cattle.index + SD + workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend, 
+                   data = data.extensive.pre.producer, family = binomial(link = "logit"))
+
+summary(logit.pre.producer)
+
+# Compute clustered standard errors by 'state'
+cluster_se <- vcovCL(logit.pre.producer, cluster = ~state)
+
+# Clustered coefficient test
+coeftest(logit.pre.producer, vcov. = cluster_se)
+
+#marginal effect 
+
+margins(logit.pre.producer)
+
+
+
+
+
+
+
+
+#post-2018
+
+data.extensive.post.producer <- post2018.pool %>%
+  mutate(market.share.producer = ifelse(market.share.producer > 0, 1, 0))
+
+
+logit.post.producer <- glm(market.share.producer ~ cattle.index + SD + workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+                   data = data.extensive.post.producer, family = binomial(link = "logit"))
+
+summary(logit.post.producer)
+
+# Compute clustered standard errors by 'state'
+cluster_se <- vcovCL(logit.post.producer, cluster = ~state)
+
+# Clustered coefficient test
+coeftest(logit.post.producer, vcov. = cluster_se)
+
+#marginal effect 
+
+margins(logit.post.producer)
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+#pre 2019
+#extensive margin
+#non pilot 
+
+
+#non-pilot state
+data.extensive.pre.nonpilot.producer <- pre2019.nonpilot %>%
+  mutate(market.share.producer = ifelse(market.share.producer > 0, 1, 0))
+
+
+
+
+#workshop
+model34 <- glm(market.share.producer ~ cattle.index + SD + workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend, 
+                   data = data.extensive.pre.nonpilot.producer, family = binomial(link = "logit"))
+
+cluster_se34 <- vcovCL(model34, cluster = ~state)
+
+coeftest(model34, vcov. = cluster_se34)
+
+
+
+```
+
+
+```{R}
+
+#pre 2019
+#extensive margin
+#pilot state
+
+
+#pilot state 
+
+
+data.extensive.pre.pilot.producer <- pre2019.pilot %>%
+  mutate(market.share.producer = ifelse(market.share.producer > 0, 1, 0))
+
+
+#workshop
+model38 <- glm(market.share.producer ~ cattle.index + SD + workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend, 
+                   data = data.extensive.pre.pilot.producer, family = binomial(link = "logit"))
+
+
+cluster_se38 <- vcovCL(model38, cluster = ~state)
+
+coeftest(model38, vcov. = cluster_se38)
+
+```
+
+
+
+
+
+```{R}
+#pre 2019
+#intensive margin
+#producer market share
+#pooled sample
+
+
+pre2019data.intensive.pool.producer <- pre2019.pool %>%
+filter(market.share.producer>0)
+
+#fractional producer
+pre2019.fractional.pool.producer <-glm(market.share.producer ~ cattle.index + SD + workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = pre2019data.intensive.pool.producer,
+  family = quasibinomial (link = "logit")
+)
+
+summary(pre2019.fractional.pool.producer)
+
+# Compute clustered standard errors by 'state'
+cluster_se <- vcovCL(pre2019.fractional.pool.producer, cluster = ~state)
+
+# Clustered coefficient test
+coeftest(pre2019.fractional.pool.producer, vcov. = cluster_se)
+
+#marginal value 
+
+margins(pre2019.fractional.pool.producer)
+
+```
+
+
+
+
+
+
+
+```{R}
+#pre 2019
+#intensive margin 
+
+
+#pooled sample
+
+pre2019data.intensive.pool.producer <- pre2019.pool %>%
+filter(market.share.producer>0)
+
+
+
+#projects 
+
+
+model41 <-glm(market.share.producer ~ cattle.index + SD + projects * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = pre2019data.intensive.pool.producer,
+  family = quasibinomial (link = "logit")
+)
+
+
+
+
+#workshop 
+
+model42 <-glm(market.share.producer ~ cattle.index + SD + workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = pre2019data.intensive.pool.producer,
+  family = quasibinomial (link = "logit")
+)
+
+
+#dollar.on.workshop 
+model43 <-glm(market.share.producer ~ cattle.index + SD + dollar.on.workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = pre2019data.intensive.pool.producer,
+  family = quasibinomial (link = "logit")
+)
+
+
+
+#dollar.per.workshop 
+model44 <-glm(market.share.producer ~ cattle.index + SD + dollar.per.workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = pre2019data.intensive.pool.producer,
+  family = quasibinomial (link = "logit")
+)
+
+
+
+#non-pilot state 
+
+pre2019data.intensive.nonpilot.producer <- pre2019.nonpilot %>%
+filter(market.share.producer>0)
+
+#projects 
+
+
+model45 <-glm(market.share.producer ~ cattle.index + SD + projects * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = pre2019data.intensive.nonpilot.producer,
+  family = quasibinomial (link = "logit")
+)
+
+
+
+
+#workshop 
+
+model46 <-glm(market.share.producer ~ cattle.index + SD + workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = pre2019data.intensive.nonpilot.producer,
+  family = quasibinomial (link = "logit")
+)
+
+
+#dollar.on.workshop 
+model47 <-glm(market.share.producer ~ cattle.index + SD + dollar.on.workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = pre2019data.intensive.nonpilot.producer,
+  family = quasibinomial (link = "logit")
+)
+
+
+
+#dollar.per.workshop 
+model48 <-glm(market.share.producer ~ cattle.index + SD + dollar.per.workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = pre2019data.intensive.nonpilot.producer,
+  family = quasibinomial (link = "logit")
+)
+
+
+
+
+#pilot state
+
+
+
+pre2019data.intensive.pilot.producer <- pre2019.pilot %>%
+filter(market.share.producer>0)
+
+#projects 
+
+
+model49 <-glm(market.share.producer ~ cattle.index + SD + projects * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = pre2019data.intensive.pilot.producer,
+  family = quasibinomial (link = "logit")
+)
+
+
+
+
+#workshop 
+
+model50 <-glm(market.share.producer ~ cattle.index + SD + workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = pre2019data.intensive.pilot.producer,
+  family = quasibinomial (link = "logit")
+)
+
+
+#dollar.on.workshop 
+model51 <-glm(market.share.producer ~ cattle.index + SD + dollar.on.workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = pre2019data.intensive.pilot.producer,
+  family = quasibinomial (link = "logit")
+)
+
+
+
+#dollar.per.workshop 
+model52 <-glm(market.share.producer ~ cattle.index + SD + dollar.per.workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = pre2019data.intensive.pilot.producer,
+  family = quasibinomial (link = "logit")
+)
+
+
+
+
+#result summary
+
+library(lmtest)
+library(broom)
+
+# Step 3: Clustered SEs
+cluster_se41 <- vcovCL(model41, cluster = ~state)
+cluster_se42 <- vcovCL(model42, cluster = ~state)
+cluster_se43 <- vcovCL(model43, cluster = ~state)
+cluster_se44 <- vcovCL(model44, cluster = ~state)
+cluster_se45 <- vcovCL(model45, cluster = ~state)
+cluster_se46 <- vcovCL(model46, cluster = ~state)
+cluster_se47 <- vcovCL(model47, cluster = ~state)
+cluster_se48 <- vcovCL(model48, cluster = ~state)
+cluster_se49 <- vcovCL(model49, cluster = ~state)
+cluster_se50 <- vcovCL(model50, cluster = ~state)
+cluster_se51 <- vcovCL(model51, cluster = ~state)
+cluster_se52 <- vcovCL(model52, cluster = ~state)
+
+# Step 4: Get coeftest with clustered SEs
+ct41 <- coeftest(model41, vcov. = cluster_se41)
+ct42 <- coeftest(model42, vcov. = cluster_se42)
+ct43 <- coeftest(model43, vcov. = cluster_se43)
+ct44 <- coeftest(model44, vcov. = cluster_se44)
+ct45 <- coeftest(model45, vcov. = cluster_se45)
+ct46 <- coeftest(model46, vcov. = cluster_se46)
+ct47 <- coeftest(model47, vcov. = cluster_se47)
+ct48 <- coeftest(model48, vcov. = cluster_se48)
+ct49 <- coeftest(model49, vcov. = cluster_se49)
+ct50 <- coeftest(model50, vcov. = cluster_se50)
+ct51 <- coeftest(model51, vcov. = cluster_se51)
+ct52 <- coeftest(model52, vcov. = cluster_se52)
+
+# Step 5: Convert to tidy format
+tidy41 <- tidy(ct41) %>% mutate(conf.low = estimate - 1.96 * std.error,
+                                conf.high = estimate + 1.96 * std.error,
+                                model = "Stage2 (2003-2018) producer.market.share pre2019 projects",
+                                stars = case_when(p.value < 0.01 ~ "***",
+                                                  p.value < 0.05 ~ "**",
+                                                  p.value < 0.10 ~ "*",
+                                                  TRUE ~ ""))
+
+tidy42 <- tidy(ct42) %>% mutate(conf.low = estimate - 1.96 * std.error,
+                                conf.high = estimate + 1.96 * std.error,
+                                model = "Stage2 (2003-2018) producer.market.share pre2019 workshop",
+                                stars = case_when(p.value < 0.01 ~ "***",
+                                                  p.value < 0.05 ~ "**",
+                                                  p.value < 0.10 ~ "*",
+                                                  TRUE ~ ""))
+
+tidy43 <- tidy(ct43) %>% mutate(conf.low = estimate - 1.96 * std.error,
+                                conf.high = estimate + 1.96 * std.error,
+                                model = "Stage2 (2003-2018) producer.market.share pre2019 dollar.on.workshop",
+                                stars = case_when(p.value < 0.01 ~ "***",
+                                                  p.value < 0.05 ~ "**",
+                                                  p.value < 0.10 ~ "*",
+                                                  TRUE ~ ""))
+
+tidy44 <- tidy(ct44) %>% mutate(conf.low = estimate - 1.96 * std.error,
+                                conf.high = estimate + 1.96 * std.error,
+                                model = "Stage2 (2003-2018) producer.market.share pre2019 dollar.per.workshop",
+                                stars = case_when(p.value < 0.01 ~ "***",
+                                                  p.value < 0.05 ~ "**",
+                                                  p.value < 0.10 ~ "*",
+                                                  TRUE ~ ""))
+
+tidy45 <- tidy(ct45) %>% mutate(conf.low = estimate - 1.96 * std.error,
+                                conf.high = estimate + 1.96 * std.error,
+                                model = "Stage2 (2003-2018) producer.market.share non-pilot projects",
+                                stars = case_when(p.value < 0.01 ~ "***",
+                                                  p.value < 0.05 ~ "**",
+                                                  p.value < 0.10 ~ "*",
+                                                  TRUE ~ ""))
+
+tidy46 <- tidy(ct46) %>% mutate(conf.low = estimate - 1.96 * std.error,
+                                conf.high = estimate + 1.96 * std.error,
+                                model = "Stage2 (2003-2018) producer.market.share non-pilot workshop",
+                                stars = case_when(p.value < 0.01 ~ "***",
+                                                  p.value < 0.05 ~ "**",
+                                                  p.value < 0.10 ~ "*",
+                                                  TRUE ~ ""))
+
+tidy47 <- tidy(ct47) %>% mutate(conf.low = estimate - 1.96 * std.error,
+                                conf.high = estimate + 1.96 * std.error,
+                                model = "Stage2 (2003-2018) producer.market.share non-pilot dollar.on.workshop",
+                                stars = case_when(p.value < 0.01 ~ "***",
+                                                  p.value < 0.05 ~ "**",
+                                                  p.value < 0.10 ~ "*",
+                                                  TRUE ~ ""))
+
+tidy48 <- tidy(ct48) %>% mutate(conf.low = estimate - 1.96 * std.error,
+                                conf.high = estimate + 1.96 * std.error,
+                                model = "Stage2 (2003-2018) producer.market.share non-pilot dollar.per.workshop",
+                                stars = case_when(p.value < 0.01 ~ "***",
+                                                  p.value < 0.05 ~ "**",
+                                                  p.value < 0.10 ~ "*",
+                                                  TRUE ~ ""))
+
+tidy49 <- tidy(ct49) %>% mutate(conf.low = estimate - 1.96 * std.error,
+                                conf.high = estimate + 1.96 * std.error,
+                                model = "Stage2 (2003-2018) producer.market.share pilot projects",
+                                stars = case_when(p.value < 0.01 ~ "***",
+                                                  p.value < 0.05 ~ "**",
+                                                  p.value < 0.10 ~ "*",
+                                                  TRUE ~ ""))
+
+tidy50 <- tidy(ct50) %>% mutate(conf.low = estimate - 1.96 * std.error,
+                                conf.high = estimate + 1.96 * std.error,
+                                model = "Stage2 (2003-2018) producer.market.share pilot workshop",
+                                stars = case_when(p.value < 0.01 ~ "***",
+                                                  p.value < 0.05 ~ "**",
+                                                  p.value < 0.10 ~ "*",
+                                                  TRUE ~ ""))
+
+tidy51 <- tidy(ct51) %>% mutate(conf.low = estimate - 1.96 * std.error,
+                                conf.high = estimate + 1.96 * std.error,
+                                model = "Stage2 (2003-2018) producer.market.share pilot dollar.on.workshop",
+                                stars = case_when(p.value < 0.01 ~ "***",
+                                                  p.value < 0.05 ~ "**",
+                                                  p.value < 0.10 ~ "*",
+                                                  TRUE ~ ""))
+
+tidy52 <- tidy(ct52) %>% mutate(conf.low = estimate - 1.96 * std.error,
+                                conf.high = estimate + 1.96 * std.error,
+                                model = "Stage2 (2003-2018) producer.market.share pilot dollar.per.workshop",
+                                stars = case_when(p.value < 0.01 ~ "***",
+                                                  p.value < 0.05 ~ "**",
+                                                  p.value < 0.10 ~ "*",
+                                                  TRUE ~ ""))
+
+
+#marginal effect: AME
+
+
+# model41
+marg41 <- margins(model41)
+marg41_summary <- as.data.frame(summary(marg41)) %>%
+  dplyr::rename(term = factor) %>%
+  dplyr::select(term, AME)
+tidy41 <- tidy41 %>%
+  dplyr::left_join(marg41_summary, by = "term")
+
+# model42
+marg42 <- margins(model42)
+marg42_summary <- as.data.frame(summary(marg42)) %>%
+  dplyr::rename(term = factor) %>%
+  dplyr::select(term, AME)
+tidy42 <- tidy42 %>%
+  dplyr::left_join(marg42_summary, by = "term")
+
+# model43
+marg43 <- margins(model43)
+marg43_summary <- as.data.frame(summary(marg43)) %>%
+  dplyr::rename(term = factor) %>%
+  dplyr::select(term, AME)
+tidy43 <- tidy43 %>%
+  dplyr::left_join(marg43_summary, by = "term")
+
+# model44
+marg44 <- margins(model44)
+marg44_summary <- as.data.frame(summary(marg44)) %>%
+  dplyr::rename(term = factor) %>%
+  dplyr::select(term, AME)
+tidy44 <- tidy44 %>%
+  dplyr::left_join(marg44_summary, by = "term")
+
+# model45
+marg45 <- margins(model45)
+marg45_summary <- as.data.frame(summary(marg45)) %>%
+  dplyr::rename(term = factor) %>%
+  dplyr::select(term, AME)
+tidy45 <- tidy45 %>%
+  dplyr::left_join(marg45_summary, by = "term")
+
+# model46
+marg46 <- margins(model46)
+marg46_summary <- as.data.frame(summary(marg46)) %>%
+  dplyr::rename(term = factor) %>%
+  dplyr::select(term, AME)
+tidy46 <- tidy46 %>%
+  dplyr::left_join(marg46_summary, by = "term")
+
+# model47
+marg47 <- margins(model47)
+marg47_summary <- as.data.frame(summary(marg47)) %>%
+  dplyr::rename(term = factor) %>%
+  dplyr::select(term, AME)
+tidy47 <- tidy47 %>%
+  dplyr::left_join(marg47_summary, by = "term")
+
+# model48
+marg48 <- margins(model48)
+marg48_summary <- as.data.frame(summary(marg48)) %>%
+  dplyr::rename(term = factor) %>%
+  dplyr::select(term, AME)
+tidy48 <- tidy48 %>%
+  dplyr::left_join(marg48_summary, by = "term")
+
+# model49
+marg49 <- margins(model49)
+marg49_summary <- as.data.frame(summary(marg49)) %>%
+  dplyr::rename(term = factor) %>%
+  dplyr::select(term, AME)
+tidy49 <- tidy49 %>%
+  dplyr::left_join(marg49_summary, by = "term")
+
+# model50
+marg50 <- margins(model50)
+marg50_summary <- as.data.frame(summary(marg50)) %>%
+  dplyr::rename(term = factor) %>%
+  dplyr::select(term, AME)
+tidy50 <- tidy50 %>%
+  dplyr::left_join(marg50_summary, by = "term")
+
+# model51
+marg51 <- margins(model51)
+marg51_summary <- as.data.frame(summary(marg51)) %>%
+  dplyr::rename(term = factor) %>%
+  dplyr::select(term, AME)
+tidy51 <- tidy51 %>%
+  dplyr::left_join(marg51_summary, by = "term")
+
+# model52
+marg52 <- margins(model52)
+marg52_summary <- as.data.frame(summary(marg52)) %>%
+  dplyr::rename(term = factor) %>%
+  dplyr::select(term, AME)
+tidy52 <- tidy52 %>%
+  dplyr::left_join(marg52_summary, by = "term")
+
+
+
+
+
+
+#results
+
+pre2019.intensive.pilot.nonpilot <- bind_rows(tidy41, tidy42, tidy43, tidy44, tidy45, tidy46, tidy47, tidy48, tidy49, tidy50, tidy51, tidy52)
+
+print(pre2019.intensive.pilot.nonpilot)
+
+```
+
+
+```{R}
+#post 2018 
+#intensive margin
+
+
+
+
+#pooled 
+post2018data.intensive.pool.producer <- post2018.pool %>%
+filter(market.share.producer>0)
+
+
+#projects
+
+model53 <-glm(market.share.producer ~ cattle.index + SD + projects * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = post2018data.intensive.pool.producer,
+  family = quasibinomial (link = "logit")
+)
+
+
+
+#workshop
+
+
+model54 <-glm(market.share.producer ~ cattle.index + SD + workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = post2018data.intensive.pool.producer,
+  family = quasibinomial (link = "logit")
+)
+
+
+#dollar.on.workshop 
+model55 <-glm(market.share.producer ~ cattle.index + SD + dollar.on.workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = post2018data.intensive.pool.producer,
+  family = quasibinomial (link = "logit")
+)
+
+
+#dollar.per.workshop 
+model56 <-glm(market.share.producer ~ cattle.index + SD + dollar.per.workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = post2018data.intensive.pool.producer,
+  family = quasibinomial (link = "logit")
+)
+
+
+
+
+
+
+
+#non-pilot states 
+
+post2018data.intensive.nonpilot.producer <- post2018.nonpilot %>%
+filter(market.share.producer>0)
+
+
+
+#projects
+
+model57 <-glm(market.share.producer ~ cattle.index + SD + projects * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = post2018data.intensive.nonpilot.producer,
+  family = quasibinomial (link = "logit")
+)
+
+
+
+#workshop
+
+
+model58 <-glm(market.share.producer ~ cattle.index + SD + workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = post2018data.intensive.nonpilot.producer,
+  family = quasibinomial (link = "logit")
+)
+
+
+#dollar.on.workshop 
+model59 <-glm(market.share.producer ~ cattle.index + SD + dollar.on.workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = post2018data.intensive.nonpilot.producer,
+  family = quasibinomial (link = "logit")
+)
+
+
+#dollar.per.workshop 
+model60 <-glm(market.share.producer ~ cattle.index + SD + dollar.per.workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = post2018data.intensive.nonpilot.producer,
+  family = quasibinomial (link = "logit")
+)
+
+
+
+
+
+
+#pilot-state 
+
+
+post2018data.intensive.pilot.producer <- post2018.pilot %>%
+filter(market.share.producer>0)
+
+#projects
+
+model61 <-glm(market.share.producer ~ cattle.index + SD + projects * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = post2018data.intensive.pilot.producer,
+  family = quasibinomial (link = "logit")
+)
+
+
+
+#workshop
+
+
+model62 <-glm(market.share.producer ~ cattle.index + SD + workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = post2018data.intensive.pilot.producer,
+  family = quasibinomial (link = "logit")
+)
+
+
+#dollar.per.workshop 
+model63 <-glm(market.share.producer ~ cattle.index + SD + dollar.on.workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = post2018data.intensive.pilot.producer,
+  family = quasibinomial (link = "logit")
+)
+
+
+#dollar.per.workshop 
+model64 <-glm(market.share.producer ~ cattle.index + SD + dollar.per.workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = post2018data.intensive.pilot.producer,
+  family = quasibinomial (link = "logit")
+)
+
+
+
+# Step 3: Clustered SEs
+cluster_se53 <- vcovCL(model53, cluster = ~state)
+cluster_se54 <- vcovCL(model54, cluster = ~state)
+cluster_se55 <- vcovCL(model55, cluster = ~state)
+cluster_se56 <- vcovCL(model56, cluster = ~state)
+cluster_se57 <- vcovCL(model57, cluster = ~state)
+cluster_se58 <- vcovCL(model58, cluster = ~state)
+cluster_se59 <- vcovCL(model59, cluster = ~state)
+cluster_se60 <- vcovCL(model60, cluster = ~state)
+cluster_se61 <- vcovCL(model61, cluster = ~state)
+cluster_se62 <- vcovCL(model62, cluster = ~state)
+cluster_se63 <- vcovCL(model63, cluster = ~state)
+cluster_se64 <- vcovCL(model64, cluster = ~state)
+
+# Step 4: Get coeftest with clustered SEs
+ct53 <- coeftest(model53, vcov. = cluster_se53)
+ct54 <- coeftest(model54, vcov. = cluster_se54)
+ct55 <- coeftest(model55, vcov. = cluster_se55)
+ct56 <- coeftest(model56, vcov. = cluster_se56)
+ct57 <- coeftest(model57, vcov. = cluster_se57)
+ct58 <- coeftest(model58, vcov. = cluster_se58)
+ct59 <- coeftest(model59, vcov. = cluster_se59)
+ct60 <- coeftest(model60, vcov. = cluster_se60)
+ct61 <- coeftest(model61, vcov. = cluster_se61)
+ct62 <- coeftest(model62, vcov. = cluster_se62)
+ct63 <- coeftest(model63, vcov. = cluster_se63)
+ct64 <- coeftest(model64, vcov. = cluster_se64)
+
+# Step 5: Convert to tidy format
+tidy53 <- tidy(ct53) %>% mutate(conf.low = estimate - 1.96 * std.error,
+                               conf.high = estimate + 1.96 * std.error,
+                               model = "Stage2 (2019-2023) producer.market.share post projects",
+                               stars = case_when(p.value < 0.01 ~ "***",
+                                                 p.value < 0.05 ~ "**",
+                                                 p.value < 0.10 ~ "*",
+                                                 TRUE ~ ""))
+
+tidy54 <- tidy(ct54) %>% mutate(conf.low = estimate - 1.96 * std.error,
+                               conf.high = estimate + 1.96 * std.error,
+                               model = "Stage2 (2019-2023) producer.market.share post workshop",
+                               stars = case_when(p.value < 0.01 ~ "***",
+                                                 p.value < 0.05 ~ "**",
+                                                 p.value < 0.10 ~ "*",
+                                                 TRUE ~ ""))
+
+tidy55 <- tidy(ct55) %>% mutate(conf.low = estimate - 1.96 * std.error,
+                               conf.high = estimate + 1.96 * std.error,
+                               model = "Stage2 (2019-2023) producer.market.share post dollar.on.workshop",
+                               stars = case_when(p.value < 0.01 ~ "***",
+                                                 p.value < 0.05 ~ "**",
+                                                 p.value < 0.10 ~ "*",
+                                                 TRUE ~ ""))
+
+tidy56 <- tidy(ct56) %>% mutate(conf.low = estimate - 1.96 * std.error,
+                               conf.high = estimate + 1.96 * std.error,
+                               model = "Stage2 (2019-2023) producer.market.share post dollar.per.workshop",
+                               stars = case_when(p.value < 0.01 ~ "***",
+                                                 p.value < 0.05 ~ "**",
+                                                 p.value < 0.10 ~ "*",
+                                                 TRUE ~ ""))
+
+tidy57 <- tidy(ct57) %>% mutate(conf.low = estimate - 1.96 * std.error,
+                               conf.high = estimate + 1.96 * std.error,
+                               model = "Stage2 (2019-2023) producer.market.share non-pilot projects",
+                               stars = case_when(p.value < 0.01 ~ "***",
+                                                 p.value < 0.05 ~ "**",
+                                                 p.value < 0.10 ~ "*",
+                                                 TRUE ~ ""))
+
+tidy58 <- tidy(ct58) %>% mutate(conf.low = estimate - 1.96 * std.error,
+                               conf.high = estimate + 1.96 * std.error,
+                               model = "Stage2 (2019-2023) producer.market.share non-pilot workshop",
+                               stars = case_when(p.value < 0.01 ~ "***",
+                                                 p.value < 0.05 ~ "**",
+                                                 p.value < 0.10 ~ "*",
+                                                 TRUE ~ ""))
+
+tidy59 <- tidy(ct59) %>% mutate(conf.low = estimate - 1.96 * std.error,
+                               conf.high = estimate + 1.96 * std.error,
+                               model = "Stage2 (2019-2023) producer.market.share non-pilot dollar.on.workshop",
+                               stars = case_when(p.value < 0.01 ~ "***",
+                                                 p.value < 0.05 ~ "**",
+                                                 p.value < 0.10 ~ "*",
+                                                 TRUE ~ ""))
+
+tidy60 <- tidy(ct60) %>% mutate(conf.low = estimate - 1.96 * std.error,
+                               conf.high = estimate + 1.96 * std.error,
+                               model = "Stage2 (2019-2023) producer.market.share non-pilot dollar.per.workshop",
+                               stars = case_when(p.value < 0.01 ~ "***",
+                                                 p.value < 0.05 ~ "**",
+                                                 p.value < 0.10 ~ "*",
+                                                 TRUE ~ ""))
+
+tidy61 <- tidy(ct61) %>% mutate(conf.low = estimate - 1.96 * std.error,
+                               conf.high = estimate + 1.96 * std.error,
+                               model = "Stage2 (2019-2023) producer.market.share pilot projects",
+                               stars = case_when(p.value < 0.01 ~ "***",
+                                                 p.value < 0.05 ~ "**",
+                                                 p.value < 0.10 ~ "*",
+                                                 TRUE ~ ""))
+
+tidy62 <- tidy(ct62) %>% mutate(conf.low = estimate - 1.96 * std.error,
+                               conf.high = estimate + 1.96 * std.error,
+                               model = "Stage2 (2019-2023) producer.market.share pilot workshop",
+                               stars = case_when(p.value < 0.01 ~ "***",
+                                                 p.value < 0.05 ~ "**",
+                                                 p.value < 0.10 ~ "*",
+                                                 TRUE ~ ""))
+
+tidy63 <- tidy(ct63) %>% mutate(conf.low = estimate - 1.96 * std.error,
+                               conf.high = estimate + 1.96 * std.error,
+                               model = "Stage2 (2019-2023) producer.market.share pilot dollar.on.workshop",
+                               stars = case_when(p.value < 0.01 ~ "***",
+                                                 p.value < 0.05 ~ "**",
+                                                 p.value < 0.10 ~ "*",
+                                                 TRUE ~ ""))
+
+tidy64 <- tidy(ct64) %>% mutate(conf.low = estimate - 1.96 * std.error,
+                               conf.high = estimate + 1.96 * std.error,
+                               model = "Stage2 (2019-2023) producer.market.share pilot dollar.per.workshop",
+                               stars = case_when(p.value < 0.01 ~ "***",
+                                                 p.value < 0.05 ~ "**",
+                                                 p.value < 0.10 ~ "*",
+                                                 TRUE ~ ""))
+
+
+#marginal effect: AME
+
+# model53
+marg53 <- margins(model53)
+marg53_summary <- as.data.frame(summary(marg53)) %>%
+  dplyr::rename(term = factor) %>%
+  dplyr::select(term, AME)
+tidy53 <- tidy53 %>%
+  dplyr::left_join(marg53_summary, by = "term")
+
+# model54
+marg54 <- margins(model54)
+marg54_summary <- as.data.frame(summary(marg54)) %>%
+  dplyr::rename(term = factor) %>%
+  dplyr::select(term, AME)
+tidy54 <- tidy54 %>%
+  dplyr::left_join(marg54_summary, by = "term")
+
+# model55
+marg55 <- margins(model55)
+marg55_summary <- as.data.frame(summary(marg55)) %>%
+  dplyr::rename(term = factor) %>%
+  dplyr::select(term, AME)
+tidy55 <- tidy55 %>%
+  dplyr::left_join(marg55_summary, by = "term")
+
+# model56
+marg56 <- margins(model56)
+marg56_summary <- as.data.frame(summary(marg56)) %>%
+  dplyr::rename(term = factor) %>%
+  dplyr::select(term, AME)
+tidy56 <- tidy56 %>%
+  dplyr::left_join(marg56_summary, by = "term")
+
+# model57
+marg57 <- margins(model57)
+marg57_summary <- as.data.frame(summary(marg57)) %>%
+  dplyr::rename(term = factor) %>%
+  dplyr::select(term, AME)
+tidy57 <- tidy57 %>%
+  dplyr::left_join(marg57_summary, by = "term")
+
+# model58
+marg58 <- margins(model58)
+marg58_summary <- as.data.frame(summary(marg58)) %>%
+  dplyr::rename(term = factor) %>%
+  dplyr::select(term, AME)
+tidy58 <- tidy58 %>%
+  dplyr::left_join(marg58_summary, by = "term")
+
+# model59
+marg59 <- margins(model59)
+marg59_summary <- as.data.frame(summary(marg59)) %>%
+  dplyr::rename(term = factor) %>%
+  dplyr::select(term, AME)
+tidy59 <- tidy59 %>%
+  dplyr::left_join(marg59_summary, by = "term")
+
+# model60
+marg60 <- margins(model60)
+marg60_summary <- as.data.frame(summary(marg60)) %>%
+  dplyr::rename(term = factor) %>%
+  dplyr::select(term, AME)
+tidy60 <- tidy60 %>%
+  dplyr::left_join(marg60_summary, by = "term")
+
+# model61
+marg61 <- margins(model61)
+marg61_summary <- as.data.frame(summary(marg61)) %>%
+  dplyr::rename(term = factor) %>%
+  dplyr::select(term, AME)
+tidy61 <- tidy61 %>%
+  dplyr::left_join(marg61_summary, by = "term")
+
+# model62
+marg62 <- margins(model62)
+marg62_summary <- as.data.frame(summary(marg62)) %>%
+  dplyr::rename(term = factor) %>%
+  dplyr::select(term, AME)
+tidy62 <- tidy62 %>%
+  dplyr::left_join(marg62_summary, by = "term")
+
+# model63
+marg63 <- margins(model63)
+marg63_summary <- as.data.frame(summary(marg63)) %>%
+  dplyr::rename(term = factor) %>%
+  dplyr::select(term, AME)
+tidy63 <- tidy63 %>%
+  dplyr::left_join(marg63_summary, by = "term")
+
+# model64
+marg64 <- margins(model64)
+marg64_summary <- as.data.frame(summary(marg64)) %>%
+  dplyr::rename(term = factor) %>%
+  dplyr::select(term, AME)
+tidy64 <- tidy64 %>%
+  dplyr::left_join(marg64_summary, by = "term")
+
+
+
+
+
+
+
+
+
+
+# Step 6: Combine and print
+intensive.prepost.pilot.non.pilot <- bind_rows(
+  tidy53, tidy54, tidy55, tidy56, tidy57, tidy58,
+  tidy59, tidy60, tidy61, tidy62, tidy63, tidy64
+)
+
+print(intensive.prepost.pilot.non.pilot)
+
+
+```
+
+
+
+
+```{r}
+all.models <- bind_rows(tidy1, tidy2, tidy3, tidy4, tidy5, tidy6, tidy7, tidy8, tidy9, tidy10, tidy11, tidy12, tidy13, tidy14, tidy15, tidy16, tidy17, tidy18, tidy19, tidy20, tidy21, tidy22, tidy23, tidy24, tidy25, tidy26, tidy27, tidy28, tidy29, tidy30, tidy31, tidy32, tidy33, tidy34, tidy35, tidy36, tidy37, tidy38, tidy39, tidy40, tidy41, tidy42, tidy43, tidy44, tidy45, tidy46, tidy47, tidy48, tidy49, tidy50, tidy51, tidy52, tidy53, tidy54, tidy55, tidy56, tidy57, tidy58, tidy59, tidy60, tidy61, tidy62, tidy63, tidy64
+)
+
+print(all.models)
+```
+
+
+
+```{R}
+#procurement by columns
+
+library(tidyr)
+library(dplyr)
+
+all.models.procured <- all.models %>%
+  separate(col = model, into = c("stage", "years", "DV", "type", "IV"), sep = " ", remove = FALSE)
+print(all.models.procured)
+
+
+```
+
+```{R}
+
+#download 
+
+library(writexl)
+
+write_xlsx(all.models.procured, "results_producermarketshareallmodels.xlsx")
+
+
+```
+
+
+```{r}
+#combining producer and product market share
+
+library(readxl)
+producer <- read_excel("results_producermarketshareallmodels.xlsx")
+
+product <- read_excel("results_productmarketshareallmodels.xlsx")
+
+combined <- bind_rows(producer, product)
+
+print(combined)
+
+#download
+library(writexl)
+
+write_xlsx(combined, "results_producerandproduct.xlsx")
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+```{R}
+#pre 2019 
+#intensive margin
+#producer market share
+#non-pilot states 
+
+
+pre2019data.intensive.nonpilot.producer <- pre2019.nonpilot %>%
+filter(market.share.producer>0)
+
+#fractional producer
+pre2019.fractional.nonpilot.producer <-glm(market.share.producer ~ cattle.index + SD + workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = pre2019data.intensive.nonpilot.producer,
+  family = quasibinomial (link = "logit")
+)
+
+summary(pre2019.fractional.nonpilot.producer)
+
+# Compute clustered standard errors by 'state'
+cluster_se <- vcovCL(pre2019.fractional.nonpilot.producer, cluster = ~state)
+
+# Clustered coefficient test
+coeftest(pre2019.fractional.nonpilot.producer, vcov. = cluster_se)
+
+#marginal value 
+
+margins(pre2019.fractional.nonpilot.producer)
+
+```
+
+```{R}
+#pre 2019 
+#intensive margin
+#producer market share
+#pilot states 
+
+
+pre2019data.intensive.pilot.producer <- pre2019.pilot %>%
+filter(market.share.producer>0)
+
+#fractional producer
+pre2019.fractional.pilot.producer <-glm(market.share.producer ~ cattle.index + SD + workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = pre2019data.intensive.pilot.producer,
+  family = quasibinomial (link = "logit")
+)
+
+summary(pre2019.fractional.pilot.producer)
+
+# Compute clustered standard errors by 'state'
+cluster_se <- vcovCL(pre2019.fractional.pilot.producer, cluster = ~state)
+
+# Clustered coefficient test
+coeftest(pre2019.fractional.pilot.producer, vcov. = cluster_se)
+
+#marginal value 
+
+margins(pre2019.fractional.pilot.producer)
+
+```
+
+
+```{R}
+#post 2018
+#intensive margin
+#producer market share
+#pooled sample
+
+
+post2018data.intensive.pool.producer <- post2018.pool %>%
+filter(market.share.producer>0)
+
+#fractional producer
+post2018.fractional.pool.producer <-glm(market.share.producer ~ cattle.index + SD + workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = post2018data.intensive.pool.producer,
+  family = quasibinomial (link = "logit")
+)
+
+summary(post2018.fractional.pool.producer)
+
+# Compute clustered standard errors by 'state'
+cluster_se <- vcovCL(post2018.fractional.pool.producer, cluster = ~state)
+
+# Clustered coefficient test
+coeftest(post2018.fractional.pool.producer, vcov. = cluster_se)
+
+#marginal value 
+
+margins(post2018.fractional.pool.producer)
+
+```
+
+```{R}
+#post 2018
+#intensive margin
+#producer market share
+#non-pilot states 
+
+
+post2018data.intensive.nonpilot.producer <- post2018.nonpilot %>%
+filter(market.share.producer>0)
+
+#fractional producer
+post2018.fractional.nonpilot.producer <-glm(market.share.producer ~ cattle.index + SD + workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = post2018data.intensive.nonpilot.producer,
+  family = quasibinomial (link = "logit")
+)
+
+summary(post2018.fractional.nonpilot.producer)
+
+# Compute clustered standard errors by 'state'
+cluster_se <- vcovCL(post2018.fractional.nonpilot.producer, cluster = ~state)
+
+# Clustered coefficient test
+coeftest(post2018.fractional.nonpilot.producer, vcov. = cluster_se)
+
+#marginal value 
+
+margins(post2018.fractional.nonpilot.producer)
+
+```
+
+
+```{R}
+#post 2018
+#intensive margin
+#producer market share
+#pilot states 
+
+
+post2018data.intensive.pilot.producer <- post2018.pilot %>%
+filter(market.share.producer>0)
+
+#fractional producer
+post2018.fractional.pilot.producer <-glm(market.share.producer ~ cattle.index + SD + workshop * base.subsidy +
+                   herd.size + sq.herd.size + trend,
+  data = post2018data.intensive.pilot.producer,
+  family = quasibinomial (link = "logit")
+)
+
+summary(post2018.fractional.pilot.producer)
+
+# Compute clustered standard errors by 'state'
+cluster_se <- vcovCL(post2018.fractional.pilot.producer, cluster = ~state)
+
+# Clustered coefficient test
+coeftest(post2018.fractional.pilot.producer, vcov. = cluster_se)
+
+#marginal value 
+
+margins(post2018.fractional.pilot.producer)
+````
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
