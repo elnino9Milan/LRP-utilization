@@ -29,7 +29,7 @@ library(ggplot2)
 ```{r}
 
 #setting working directory
-setwd("C:/Users/mchauhan2/OneDrive - University of Nebraska-Lincoln/Lubben-Chauhan/LRP utilization/JAAE analysis/final model producer market share")
+setwd("C:/Users/  ")
 getwd()
 
 ```
@@ -463,7 +463,7 @@ logit.pool.producer <- glm(market.share.producer ~ lagged.participation + feeder
 
 summary(logit.pool.producer)
 
-# Compute clustered standard errors by 'state'
+# computing clustered standard errors by 'state'
 cluster_se <- vcovCL(logit.pool.producer, cluster = ~state)
 
 # Clustered coefficient test
@@ -485,7 +485,7 @@ logLik(logit.pool.producer)
 #vif 
 
 library(car)
-# Compute VIF
+# computing VIF
 vif(logit.pool.producer)
 
 
@@ -534,7 +534,7 @@ logit.nonpilot.producer <- glm(market.share.producer ~ lagged.participation + fe
 
 summary(logit.nonpilot.producer)
 
-# Compute clustered standard errors by 'state'
+# computing clustered standard errors by 'state'
 cluster_se <- vcovCL(logit.nonpilot.producer, cluster = ~state)
 
 # Clustered coefficient test
@@ -596,7 +596,7 @@ logit.pilot.producer <- glm(
 summary(logit.pilot.producer)
 
 
-# Compute clustered standard errors by 'state'
+# computing clustered standard errors by 'state'
 cluster_se <- vcovCL(logit.pilot.producer, cluster = ~state)
 
 # Clustered coefficient test
@@ -658,7 +658,7 @@ fractional.pool.producer <-glm(market.share.producer ~ lagged.producer.market.sh
 
 summary(fractional.pool.producer)
 
-# Compute clustered standard errors by 'state'
+# computing clustered standard errors by 'state'
 cluster_se <- vcovCL(fractional.pool.producer, cluster = ~state)
 
 # Clustered coefficient test
@@ -700,7 +700,7 @@ fractional.nonpilot.producer <-glm(market.share.producer ~ feeder.cattle.price +
 
 summary(fractional.nonpilot.producer)
 
-# Compute clustered standard errors by 'state'
+# computing clustered standard errors by 'state'
 cluster_se <- vcovCL(fractional.nonpilot.producer, cluster = ~state)
 
 # Clustered coefficient test
@@ -739,7 +739,7 @@ fractional.pilot.producer <-glm(market.share.producer ~ lagged.producer.market.s
 
 summary(fractional.pilot.producer)
 
-# Compute clustered standard errors by 'state'
+# computing clustered standard errors by 'state'
 cluster_se <- vcovCL(fractional.pilot.producer, cluster = ~state)
 
 # Clustered coefficient test
