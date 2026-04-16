@@ -41,12 +41,15 @@ This study uses a **two-part model**:
 * Temporal saturation of the education program in pilot states, and it is still a growing driver of participation in non-pilot states.
 
 ## Files
-
-* `two part fractional model - JAAE.Rmd`: Main analysis script
+*
+* Data cleaning
+* Visualization
+* Two-part model
+* Robustness check
 
 ## Tools Used
-
-* R (econometrics, data cleaning, visualization)
+* Excel (data entry, pivot summary)
+* R (data cleaning, visualization, econometric analysis)
 
 ## Author
 
