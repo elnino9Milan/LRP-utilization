@@ -1,4 +1,4 @@
-# Education Drives Livestock Risk Protection (LRP) Utilization
+# The Role of Risk Management Education on Livestock Risk Protection (LRP) Utilization
 
 ## Overview
 
