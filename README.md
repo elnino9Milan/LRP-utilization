@@ -10,7 +10,7 @@ This project analyzes the role of risk management education in driving the utili
 * How do education workshops affect participation and usage intensity?
 
 ## Data Sources
-
+Panel dataset created with:
 * USDA Risk Management Agency (RMA): Summary of Business (SOB)
 * USDA-NASS: Beef cow operations and inventory
 * CME Group: Feeder Cattle Index (FCI) and price volatility
