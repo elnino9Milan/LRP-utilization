@@ -2,7 +2,7 @@
 
 ## Overview
 
-This project analyzes the role of continued risk management education on Livestock Risk Protection (LRP), a federally subsidized insurance tool for US feeder cattle producers using a two-part econometric framework. The goal is to understand how education, subsidies, market conditions, and production factors influence both the extensive (participation) and intensity of LRP usage (intensive margins).
+This project analyzes the role of continued risk management education on Livestock Risk Protection (LRP), a federally subsidized insurance tool for US feeder cattle producers using a two-part econometric framework. The goal is to understand how various economic and policy factors: education, subsidies, market conditions, and operation size influence both the extensive (participation) and intensity of LRP usage (intensive margins).
 
 ## Research Question
 
@@ -30,13 +30,15 @@ This study uses a **two-part model**:
 * Feeder cattle prices
 * Feeder cattle price volatility
 * Lagged DV
+* Herd size
 * State by Year time trend
 
-## Key Insights
+## Key Findings
 
-* Education programs increase LRP participation
-* Subsidy changes significantly affect adoption
-* Strong persistence in participation behavior
+* Education workshops increase LRP participation (extensive margin) in both pilot and non-pilot states, but are non-significant at the intensive margin.
+* Subsidy changes significantly increase participation in pilot states and dominate the intensive margin in all samples: pooled, pilot, and non-pilot states.
+* Substitution effect of education and subsidy rates in the extensive margin, education is dominant in non-pilot states, and the subsidy rate in pilot states.
+* Temporal saturation of the education program in pilot states, and it is still a growing driver of participation in non-pilot states.
 
 ## Files
 
