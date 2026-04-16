@@ -1,55 +1,56 @@
-# Education Drives Livestock Risk Protection Utilization 
+# Education Drives Livestock Risk Protection (LRP) Utilization
 
 ## Overview
 
-This project analyzes the role of continued risk management education on Livestock Risk Protection (LRP), a federally subsidized insurance tool for US feeder cattle producers using a two-part econometric framework. The goal is to understand how various economic and policy factors: education, subsidies, market conditions, and operation size influence both the extensive (participation) and intensity of LRP usage (intensive margins).
+This project analyzes the role of risk management education in driving the utilization of Livestock Risk Protection (LRP), a federally subsidized insurance program for U.S. feeder cattle producers. Using a two-part econometric framework, the study examines how education, subsidies, market conditions, and operation characteristics influence both the **decision to participate** and the **intensity of LRP use**.
 
-## Research Question
+## Research Questions
 
-* What drives the utilization of LRP among US feeder cattle producers?
-* How do education workshops impact LRP participation and the insurance usage intensity?
+* What drives the utilization of LRP among U.S. feeder cattle producers?
+* How do education workshops affect participation and usage intensity?
 
-## Data and Sources
+## Data Sources
 
-* Summary of Business (SOB): USDA Risk Management Agency (RMA)
-* Beef-cow operations, beef-cow inventory: USDA-NASS
-* Feeder cattle index (FCI), and feeder cattle price volatility: CME Group 
-* Days of completed workshops on feeder cattle LRP: by Extension Risk Management Education (ERME)
+* USDA Risk Management Agency (RMA): Summary of Business (SOB)
+* USDA-NASS: Beef cow operations and inventory
+* CME Group: Feeder Cattle Index (FCI) and price volatility
+* Extension Risk Management Education (ERME): Workshop activity data
 
 ## Methodology
 
-This study uses a **two-part model**:
+This study employs a **two-part model** to separately identify drivers of participation and usage intensity:
 
-1. **Extensive Margin (Participation)** – Binary logit model
-2. **Intensive Margin (Usage intensity)** – Fractional logit model
+* **Extensive Margin (Participation):** Binary logit model
+* **Intensive Margin (Usage Intensity):** Fractional logit model
 
 ## Key Variables
-* Producer market share = Dependent variable (DV)
-* Education workshops = Explanatory variable of interest
+**Dependent Variable: Policy earning a premium (1, 0) at the extensive margin
+**Dependent Variable: 0<Producer market share at the intensive margin
+* **Main Variable of Interest:** Education workshops
 * Subsidy rates
 * Feeder cattle prices
-* Feeder cattle price volatility
-* Lagged DV
+* Price volatility
+* Lagged participation
 * Herd size
-* State by Year time trend
+* State-by-year time trend
 
 ## Key Findings
 
-* Education workshops increase LRP participation (extensive margin) in both pilot and non-pilot states, but are non-significant at the intensive margin.
-* Subsidy changes significantly increase participation in pilot states and dominate the intensive margin in all samples: pooled, pilot, and non-pilot states.
-* Substitution effect of education and subsidy rates in the extensive margin, education is dominant in non-pilot states, and the subsidy rate in pilot states.
-* Temporal saturation of the education program in pilot states, and it is still a growing driver of participation in non-pilot states.
+* Education workshops significantly increase LRP participation (extensive margin), particularly in non-pilot states, but have limited impact on usage intensity.
+* Subsidy rates strongly influence both participation and intensity, dominating the intensive margin across all samples.
+* Evidence suggests a **substitution effect** between education and subsidy rates in driving participation.
+* Education effects exhibit **temporal saturation** in pilot states, while remaining an important and growing driver in non-pilot states.
 
-## Files
-*
-* Data cleaning
-* Visualization
-* Two-part model
-* Robustness check
+## Repository Structure
+
+* `code/` – Data cleaning, econometric modeling, and robustness checks
+* `data/` – (Instructions or sample data)
+* `output/` – Tables and figures
 
 ## Tools Used
-* Excel (data entry, pivot summary)
-* R (data cleaning, visualization, econometric analysis)
+
+* R (data cleaning, summary statistics, econometrics, visualization)
+* Excel (data organization)
 
 ## Author
 
