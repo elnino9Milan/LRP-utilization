@@ -2,34 +2,35 @@
 
 ## Overview
 
-This project analyzes the determinants of Livestock Risk Protection (LRP) utilization across U.S. states using a two-part econometric framework. The goal is to understand how education programs, subsidies, and market conditions influence both participation and intensity of LRP usage.
+This project analyzes the role of continued risk management education on Livestock Risk Protection (LRP), a federally subsidized insurance tool for US feeder cattle producers using a two-part econometric framework. The goal is to understand how education, subsidies, market conditions, and production factors influence both the extensive (participation) and intensity of LRP usage (intensive margins).
 
 ## Research Question
 
-* What drives adoption of LRP among livestock producers?
-* How do education workshops impact participation and usage intensity?
+* What drives the utilization of LRP among US feeder cattle producers?
+* How do education workshops impact LRP participation and the insurance usage intensity?
 
-## Data Sources
+## Data and Sources
 
-* USDA Risk Management Agency (RMA)
-* USDA-NASS
-* CME Group (Feeder Cattle Prices)
-* Extension Risk Management Education (ERME)
+* Summary of Business (SOB): USDA Risk Management Agency (RMA)
+* Beef-cow operations, beef-cow inventory: USDA-NASS
+* Feeder cattle index (FCI), and feeder cattle price volatility: CME Group 
+* Days of completed workshops on feeder cattle LRP: by Extension Risk Management Education (ERME)
 
 ## Methodology
 
 This study uses a **two-part model**:
 
-1. **Extensive Margin (Participation)** – Logit model
-2. **Intensive Margin (Usage Intensity)** – Fractional logit model
+1. **Extensive Margin (Participation)** – Binary logit model
+2. **Intensive Margin (Usage intensity)** – Fractional logit model
 
 ## Key Variables
-
-* Education workshops (ERME-funded)
+* Producer market share = Dependent variable (DV)
+* Education workshops = Explanatory variable of interest
 * Subsidy rates
 * Feeder cattle prices
-* Price volatility
-* Lagged participation
+* Feeder cattle price volatility
+* Lagged DV
+* State by Year time trend
 
 ## Key Insights
 
