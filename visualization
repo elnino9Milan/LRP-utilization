@@ -1,0 +1,18 @@
+#density plot 
+
+P <- ggplot(eligible.dataset, aes(x = market.share.producer, fill = state.type, color = state.type)) +
+  geom_density(alpha = 0.3, size = 1) +
+  labs(
+    x = "LRP producer market share",
+    y = "Density",
+    fill = NULL,
+    color = NULL
+  ) +
+  theme_minimal(base_size = 14) +       
+  scale_fill_manual(values = c("Pilot states" = "#92C5DE", 
+                               "Non-pilot states" = "#F4A582")) +
+  scale_color_manual(values = c("Pilot states" = "#2166AC", 
+                                "Non-pilot states" = "#B2182B"))
+
+
+ggsave("output/lrp_density_plot.png", plot = p, width = 7, height = 5, dpi = 300)
