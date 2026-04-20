@@ -1,7 +1,7 @@
 # The Role of Risk Management Education on Livestock Risk Protection (LRP) Utilization
 
 
-## R code
+## Code sample (R)
 Direct link: https://github.com/elnino9Milan/LRP-utilization/blob/main/LRP_utilization.Rmd
 
 ## Overview
