@@ -43,7 +43,7 @@ This study employs a **two-part model** to separately identify drivers of partic
 
 ## Repository Structure
 
-* R code – Data cleaning, econometric modeling, and robustness checks
+* R code – Data cleaning, econometric modeling, and robustness checks; link: https://github.com/elnino9Milan/LRP-utilization/blob/main/LRP_utilization.Rmd
 * R code - Visualization - Producer market share by pilot and non-pilot states
 * Readme file
 ## Tools Used
