@@ -43,8 +43,8 @@ This study employs a **two-part model** to separately identify drivers of partic
 
 ## Repository Structure
 
-* `code/` – Data cleaning, econometric modeling, and robustness checks
-* 'visualization/' - Producer market share by pilot and non-pilot states
+* R code – Data cleaning, econometric modeling, and robustness checks
+* R code - Visualization - Producer market share by pilot and non-pilot states
 * Readme file
 ## Tools Used
 
