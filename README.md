@@ -1,5 +1,9 @@
 # The Role of Risk Management Education on Livestock Risk Protection (LRP) Utilization
 
+
+## R code
+Direct link: https://github.com/elnino9Milan/LRP-utilization/blob/main/LRP_utilization.Rmd
+
 ## Overview
 
 This project analyzes the role of risk management education in driving the utilization of Livestock Risk Protection (LRP), a federally subsidized insurance program for U.S. feeder cattle producers. Using a two-part econometric framework, the study examines how education, subsidies, market conditions, and operation characteristics influence both the **decision to participate** and the **intensity of LRP use**.
@@ -43,7 +47,7 @@ This study employs a **two-part model** to separately identify drivers of partic
 
 ## Repository Structure
 
-* R code – Data cleaning, econometric modeling, and robustness checks; link: https://github.com/elnino9Milan/LRP-utilization/blob/main/LRP_utilization.Rmd
+* R code – Data cleaning, econometric modeling, and robustness checks
 * R code - Visualization - Producer market share by pilot and non-pilot states
 * Readme file
 ## Tools Used
