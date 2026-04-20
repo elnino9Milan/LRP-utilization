@@ -4,6 +4,11 @@
 ## Code sample (R)
 Direct link: https://github.com/elnino9Milan/LRP-utilization/blob/main/LRP_utilization.Rmd
 
+This script demonstrates:
+- Data cleaning and panel data construction  
+- Econometric modeling using a two-part framework (logit and fractional logit)  
+- Implementation of lagged variables and robustness checks  
+
 ## Overview
 
 This project analyzes the role of risk management education in driving the utilization of Livestock Risk Protection (LRP), a federally subsidized insurance program for U.S. feeder cattle producers. Using a two-part econometric framework, the study examines how education, subsidies, market conditions, and operation characteristics influence both the **decision to participate** and the **intensity of LRP use**.
