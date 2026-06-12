@@ -293,10 +293,6 @@ ggsave("output/lrp_density_plot.png", plot = P, width = 7, height = 5, dpi = 300
 
 
 
-
-
-
-
 ```{R}
 
 #visualization
@@ -356,12 +352,7 @@ post2020.pilot <- post2020.pool %>%
 
 
 
-
-
-
-
 ```{R}
-
 
 #count of purchase rate 
 
@@ -435,7 +426,7 @@ education_stats(post2020.nonpilot)
 
 
 
-
+#Main Analysis
 
 
 ```{R}
@@ -469,30 +460,27 @@ cluster_se <- vcovCL(logit.pool.producer, cluster = ~state)
 # Clustered coefficient test
 coeftest(logit.pool.producer, vcov. = cluster_se)
 
-
-
-#marginal effect 
-
-library(margins)
-
-margins(logit.pool.producer)
-
-#llk
-
-logLik(logit.pool.producer)
-
-
 #vif 
 
 library(car)
 # computing VIF
 vif(logit.pool.producer)
 
+# average marginal effect 
+
+library(margins)
+
+margins(logit.pool.producer)
+
+#log likelihood 
+
+logLik(logit.pool.producer)
 
 ```
 
 
 
+#Robustness check: joint hypothesis testing to see if base subsidy rate is binding constraint in pooled sample (extensive margin)
 
 ```{R}
 
@@ -558,7 +546,7 @@ vif(logit.nonpilot.producer)
 
 
 ```{R}
-#joint hypothesis testing
+#joint hypothesis testing: to see if base subsidy rate is binding constraint in non-pilot states (extensive margin)
 
 library(car)
 
@@ -619,7 +607,7 @@ logLik(logit.pilot.producer)
 
 
 ```{R}
-#joint hypothesis testing
+#joint hypothesis testing: to see if base subsidy rate is binding constraint in pilot states (extensive margin)
 
 library(car)
 
@@ -631,7 +619,7 @@ linearHypothesis(logit.pilot.producer, c("base.subsidy = 0", "workshop:base.subs
 
 
 
-
+#Main Analysis on Intensive Margin 
 
 ```{R}
 #intensive margin
@@ -707,7 +695,7 @@ cluster_se <- vcovCL(fractional.nonpilot.producer, cluster = ~state)
 coeftest(fractional.nonpilot.producer, vcov. = cluster_se)
 
 
-#marginal effect 
+# Average marginal effect (AME)
 
 margins(fractional.nonpilot.producer)
 
