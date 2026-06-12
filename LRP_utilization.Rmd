@@ -53,7 +53,7 @@ years <- 2003: 2023
 
 #education file 
 
-education1 <- read_excel("education.xlsx", sheet = 1) %>% 
+education1 <- read_excel(".xlsx", sheet = 1) %>% 
   select(year, state, workshop)
 
 
@@ -76,13 +76,13 @@ education3 <- education2 %>%
 
 #feeder cattle
 
-feed <- read_excel("eliotfeeder.xlsx", sheet =1)
+feed <- read_excel(".xlsx", sheet =1)
 
 
 
 #CME feeder cattle index
 
-index <- read_excel("volatilityfeeder.xlsx", sheet = 1) %>% 
+index <- read_excel(".xlsx", sheet = 1) %>% 
   distinct(year, .keep_all = TRUE) %>% 
   rename(feeder.cattle.price = avg.index,
          feeder.price.volatility = std.index) %>% 
@@ -91,13 +91,13 @@ index <- read_excel("volatilityfeeder.xlsx", sheet = 1) %>%
 
 #herd size
 
-herd.size <- read_excel("herdsize.xlsx") %>% 
+herd.size <- read_excel(".xlsx") %>% 
   mutate(herd.size = ceiling(herd.size))
 
 
 #Summary of business (SOB) by state 
 
-sob1 <- read_excel("sobstate.xlsx", sheet = 2) %>% 
+sob1 <- read_excel(".xlsx", sheet = 2) %>% 
   mutate(year = as.numeric(year))
 
 sob3 <- expand.grid(year = years, state = usa) %>% 
@@ -136,7 +136,7 @@ base <- data.frame(year = 2003:2023) %>%
 
 #LRP availability by state by year
 
-avail <- read_excel("lrp_availability.xlsx") %>% 
+avail <- read_excel(".xlsx") %>% 
   mutate(state =toupper(state)) %>% 
   arrange(state)
 
@@ -195,7 +195,7 @@ eligible.dataset <- original %>%
 
 
 ```{r}
-#adding state trend with state first got LRP year = 1
+#adding state trend with state rolled out year on LRP starts at 1
 
 library(dplyr)
 
